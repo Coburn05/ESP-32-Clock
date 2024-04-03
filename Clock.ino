@@ -21,9 +21,18 @@ int cathodePins[] = {22, 21, 19, 4};
 
 byte table[10] = {B11111100, B01100000, B11011010, B11110010, B01100110, B10110110, B10111110, B11100000, B11111110, B11110110};
 
-// Set the start time to 3:55
-int startHour = 13;
-int startMinute = 47;
+// Set the start time to 3:55 PM
+int startHour = 3;
+int startMinute = 55;
+bool isPM = true;
+
+// Rotary encoder pins
+int encoderPinDT = 2; // Connected to D2 on ESP32
+int encoderPinCLK = 15; // Connected to D15 on ESP32
+int encoderPinDTState;
+int encoderPinCLKState;
+int lastEncoderPinCLKState = LOW;
+int encoderDirection = 0; // 1 for clockwise, -1 for counterclockwise
 
 void setup() {
   Serial.begin(115200); 
@@ -38,7 +47,11 @@ void setup() {
   digitalWrite(D3, HIGH);
   digitalWrite(D2, HIGH);
   digitalWrite(D1, HIGH);
-  Serial.println("Displaying elapsed time...");
+
+  // Set encoder pins as inputs
+  pinMode(encoderPinDT, INPUT_PULLUP);
+  pinMode(encoderPinCLK, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(encoderPinCLK), readEncoder, CHANGE);
 }
 
 void loop() {
@@ -48,17 +61,20 @@ void loop() {
   unsigned long currentTime = millis() / 1000;
 
   // Convert seconds to minutes and seconds
-  unsigned long elapsedSeconds = currentTime;
-  unsigned long startSeconds = startHour * 3600 + startMinute * 60;
-  unsigned long totalElapsedSeconds = elapsedSeconds + startSeconds;
-  unsigned long elapsedMinutes = totalElapsedSeconds / 60;
-  unsigned long elapsedHours = elapsedMinutes / 60;
+  int elapsedMinutes = (currentTime / 60) + startMinute;
+  int elapsedHours = (currentTime / 3600) + startHour;
 
-  // Calculate the remaining minutes after subtracting full hours
-  elapsedMinutes %= 60;
+  // Handle overflow of minutes and hours
+  if (elapsedMinutes >= 60) {
+    elapsedMinutes -= 60;
+    elapsedHours++;
+  }
+  if (elapsedHours >= 24) {
+    elapsedHours -= 24;
+  }
 
-  // Handle overflow of hours
-  elapsedHours %= 24;
+  // Adjust time based on encoder input
+  adjustTime();
 
   // Separate hours and minutes into individual digits
   separate(elapsedHours, elapsedMinutes);
@@ -66,7 +82,6 @@ void loop() {
   // Display the time
   Display();
 }
-
 
 void separate(int hours, int minutes) {
   num1 = hours / 10;
@@ -96,4 +111,54 @@ void screenOff() {
   digitalWrite(D3, HIGH);
   digitalWrite(D2, HIGH);
   digitalWrite(D1, HIGH);
+}
+
+void readEncoder() {
+  encoderPinCLKState = digitalRead(encoderPinCLK);
+  encoderPinDTState = digitalRead(encoderPinDT);
+
+  // Determine the direction of rotation
+  if (encoderPinCLKState != lastEncoderPinCLKState) {
+    if (encoderPinCLKState == HIGH) {
+      if (encoderPinDTState == HIGH) {
+        encoderDirection = 1; // Clockwise
+      } else {
+        encoderDirection = -1; // Counterclockwise
+      }
+    }
+  }
+  lastEncoderPinCLKState = encoderPinCLKState;
+}
+
+void adjustTime() {
+  static unsigned long lastTime = 0;
+
+  // Adjust time every 100 milliseconds to avoid rapid changes
+  if (millis() - lastTime >= 100) {
+    lastTime = millis();
+    
+    // Increase or decrease minutes based on encoder direction
+    if (encoderDirection == 1) {
+      startMinute++;
+      if (startMinute >= 60) {
+        startMinute = 0;
+        startHour++;
+        if (startHour >= 12) {
+          startHour = 0;
+          isPM = !isPM;
+        }
+      }
+    } else if (encoderDirection == -1) {
+      startMinute--;
+      if (startMinute < 0) {
+        startMinute = 59;
+        startHour--;
+        if (startHour < 0) {
+          startHour = 11;
+          isPM = !isPM;
+        }
+      }
+    }
+    encoderDirection = 0; // Reset encoder direction
+  }
 }
