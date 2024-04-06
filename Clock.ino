@@ -24,15 +24,23 @@ byte table[10] = {B11111100, B01100000, B11011010, B11110010, B01100110, B101101
 // Set the start time to 3:55 PM
 int startHour = 3;
 int startMinute = 55;
-bool isPM = true;
 
 // Rotary encoder pins
 int encoderPinDT = 2; // Connected to D2 on ESP32
 int encoderPinCLK = 15; // Connected to D15 on ESP32
-int encoderPinDTState;
-int encoderPinCLKState;
-int lastEncoderPinCLKState = LOW;
-int encoderDirection = 0; // 1 for clockwise, -1 for counterclockwise
+int encoderButtonPin = 14; // Example pin for the button, change as needed
+
+// Variables to track encoder rotation
+int lastStateCLK = LOW;
+int currentStateCLK;
+int lastStateDT = LOW;
+int currentStateDT;
+
+// Variable to track the last adjustment time
+unsigned long lastAdjustmentTime = 0;
+
+// Variable to indicate if timer is suspended
+bool timerSuspended = false;
 
 void setup() {
   Serial.begin(115200); 
@@ -51,7 +59,6 @@ void setup() {
   // Set encoder pins as inputs
   pinMode(encoderPinDT, INPUT_PULLUP);
   pinMode(encoderPinCLK, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(encoderPinCLK), readEncoder, CHANGE);
 }
 
 void loop() {
@@ -60,7 +67,7 @@ void loop() {
   // Get the current time in seconds since the Arduino board started
   unsigned long currentTime = millis() / 1000;
 
-  // Convert seconds to minutes and seconds
+  // Convert seconds to minutes and hours
   int elapsedMinutes = (currentTime / 60) + startMinute;
   int elapsedHours = (currentTime / 3600) + startHour;
 
@@ -80,21 +87,22 @@ void loop() {
   separate(elapsedHours, elapsedMinutes);
 
   // Display the time
-  Display();
+  displayTime();
+
+  // Check if the timer needs to be resumed
+  if (timerSuspended && (currentTime - lastAdjustmentTime >= 5)) {
+    timerSuspended = false;
+  }
 }
 
 void separate(int hours, int minutes) {
-  num1 = hours / 10;
-  numbers[0] = num1;
-  num2 = hours % 10;
-  numbers[1] = num2;
-  num3 = minutes / 10;
-  numbers[2] = num3;
-  num4 = minutes % 10;
-  numbers[3] = num4;
+  numbers[0] = hours / 10;
+  numbers[1] = hours % 10;
+  numbers[2] = minutes / 10;
+  numbers[3] = minutes % 10;
 }
 
-void Display() {
+void displayTime() {
   screenOff(); 
   digitalWrite(latchPin, LOW); 
   shiftOut(dataPin, clockPin, LSBFIRST, table[numbers[count]]); 
@@ -113,52 +121,49 @@ void screenOff() {
   digitalWrite(D1, HIGH);
 }
 
-void readEncoder() {
-  encoderPinCLKState = digitalRead(encoderPinCLK);
-  encoderPinDTState = digitalRead(encoderPinDT);
+void adjustTime() {
+  // Read the current state of the encoder pins
+  currentStateCLK = digitalRead(encoderPinCLK);
+  currentStateDT = digitalRead(encoderPinDT);
 
-  // Determine the direction of rotation
-  if (encoderPinCLKState != lastEncoderPinCLKState) {
-    if (encoderPinCLKState == HIGH) {
-      if (encoderPinDTState == HIGH) {
-        encoderDirection = 1; // Clockwise
-      } else {
-        encoderDirection = -1; // Counterclockwise
-      }
+  // If the CLK pin has changed state
+  if (currentStateCLK != lastStateCLK && currentStateCLK == HIGH) {
+    // If the DT pin is different from the CLK pin, the encoder is being turned clockwise
+    if (currentStateDT != currentStateCLK) {
+      incrementMinute();
+    } else { // Otherwise, the encoder is being turned counterclockwise
+      decrementMinute();
     }
+
+    // Record the time of adjustment
+    lastAdjustmentTime = millis() / 1000;
+
+    // Suspend the timer
+    timerSuspended = true;
   }
-  lastEncoderPinCLKState = encoderPinCLKState;
+
+  // Update last CLK pin state
+  lastStateCLK = currentStateCLK;
 }
 
-void adjustTime() {
-  static unsigned long lastTime = 0;
-
-  // Adjust time every 100 milliseconds to avoid rapid changes
-  if (millis() - lastTime >= 100) {
-    lastTime = millis();
-    
-    // Increase or decrease minutes based on encoder direction
-    if (encoderDirection == 1) {
-      startMinute++;
-      if (startMinute >= 60) {
-        startMinute = 0;
-        startHour++;
-        if (startHour >= 12) {
-          startHour = 0;
-          isPM = !isPM;
-        }
-      }
-    } else if (encoderDirection == -1) {
-      startMinute--;
-      if (startMinute < 0) {
-        startMinute = 59;
-        startHour--;
-        if (startHour < 0) {
-          startHour = 11;
-          isPM = !isPM;
-        }
-      }
+void incrementMinute() {
+  startMinute++;
+  if (startMinute >= 60) {
+    startMinute = 0;
+    startHour++;
+    if (startHour >= 24) {
+      startHour = 0;
     }
-    encoderDirection = 0; // Reset encoder direction
+  }
+}
+
+void decrementMinute() {
+  startMinute--;
+  if (startMinute < 0) {
+    startMinute = 59;
+    startHour--;
+    if (startHour < 0) {
+      startHour = 23;
+    }
   }
 }
