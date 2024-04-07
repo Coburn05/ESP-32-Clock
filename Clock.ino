@@ -152,7 +152,7 @@ void incrementMinute() {
     startMinute = 0;
     startHour++;
     if (startHour >= 24) {
-      startHour = 0;
+      startHour = 0; // Reset to 0 when 24 hours reached
     }
   }
 }
@@ -160,10 +160,11 @@ void incrementMinute() {
 void decrementMinute() {
   startMinute--;
   if (startMinute < 0) {
-    startMinute = 59;
+    startMinute = 59; // Reset to 59 when negative
     startHour--;
     if (startHour < 0) {
-      startHour = 23;
+      startHour = 23; // Wrap around to 23 when reaching -1
     }
   }
 }
+
