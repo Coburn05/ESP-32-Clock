@@ -92,6 +92,9 @@ void adjustTime() {
   int currentStateCLK = digitalRead(ENCODER_PIN_CLK);
   int currentStateDT = digitalRead(ENCODER_PIN_DT);
 
+  // Suspend the hardware timer while adjusting time
+  timerSuspended = true;
+
   if (currentStateCLK != lastStateCLK && currentStateCLK == HIGH) {
     if (currentStateDT != currentStateCLK) {
       incrementMinute();
@@ -100,8 +103,10 @@ void adjustTime() {
     }
 
     lastAdjustmentTime = millis() / 1000;
-    timerSuspended = true;
   }
+
+  // Resume the hardware timer
+  timerSuspended = false;
 
   lastStateCLK = currentStateCLK;
 }
@@ -112,7 +117,7 @@ void incrementMinute() {
     startMinute = 0;
     startHour++;
     if (startHour >= 24) {
-      startHour = 0;
+      startHour = 1; // Reset to 0 when 24 hours reached
     }
   }
 }
@@ -120,10 +125,11 @@ void incrementMinute() {
 void decrementMinute() {
   startMinute--;
   if (startMinute < 0) {
-    startMinute = 59;
-    startHour--;
-    if (startHour < 0) {
-      startHour = 23;
+    startMinute = 59; // Reset minutes to 59 when negative
+    if (startHour == 1) {
+      startHour = 24; // Roll over to 24 when reaching 01
+    } else {
+      startHour--; // Decrement hour normally
     }
   }
 }
