@@ -1,135 +1,123 @@
-#include "Timer.h"
-Timer timer;
+#include <Ticker.h>
 
-// Pin Definitions
-const int CATHODE_PINS[] = {22, 21, 19, 4};
-const int LATCH_PIN = 5;
-const int CLOCK_PIN = 18;
-const int DATA_PIN = 23;
-const int ENCODER_PIN_DT = 2; 
-const int ENCODER_PIN_CLK = 15; 
-const int ENCODER_BUTTON_PIN = 14; 
+Ticker ticker;
 
-// Display Data
+volatile int seconds = 0; // second
+volatile int minutes = 23; // minute
+volatile int hours = 10; // hour
+int digits[4]; // digits to be displayed
+
 const byte TABLE[10] = {
-  B11111100, B01100000, B11011010, B11110010, B01100110,
-  B10110110, B10111110, B11100000, B11111110, B11110110
+  B11111100, // 0
+  B01100000, // 1
+  B11011010, // 2 
+  B11110010, // 3
+  B01100110, // 4
+  B10110110, // 5 
+  B10111110, // 6
+  B11100000, // 7
+  B11111110, // 8
+  B11110110  // 9
 };
 
-// Initial Time Setup
-int startHour = 3;
-int startMinute = 55;
+// Pin Definitions
+const int CATHODE_PINS[] = {22, 21, 19, 4}; // pins for display
+const int LATCH_PIN = 5; // latch pin
+const int CLOCK_PIN = 18; // clock pin
+const int DATA_PIN = 23; // data pin to shift register
+const int ENCODER_PIN_DT = 2; // time adjust
+const int ENCODER_PIN_CLK = 15; // time adjust
+const int ENCODER_BUTTON_PIN = 14; // rotary button
 
-// State Variables
-int count = 0;
-int numbers[4];
-int lastStateCLK = LOW; // Added initialization for lastStateCLK
-unsigned long lastAdjustmentTime = 0; // Added initialization for lastAdjustmentTime
-bool timerSuspended = false; // Added initialization for timerSuspended
+void incrementSeconds() {
+  // increment seconds on software timer
+  seconds += 15;
+  if (seconds >= 60) {
+    seconds = 0;
+    incrementMinutes();
+  }
+  Serial.print("Seconds: ");
+  Serial.println(seconds);
+}
+
+void incrementMinutes() {
+  // increments minutes as needed
+  minutes++;
+  if (minutes >= 60) {
+    minutes = 0;
+    incrementHours();
+  }
+  updateDisplay();
+  Serial.print("Minutes: ");
+  Serial.println(minutes);
+}
+
+void incrementHours() {
+  // increment hours as needed
+  hours++;
+  if (hours >= 24) {
+    hours = 0;
+  }
+  Serial.print("Hours: ");
+  Serial.println(hours);
+}
+
+void screenOff() { 
+  // reset display
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(CATHODE_PINS[i], HIGH);
+  }
+}
+
+void separate() {
+  // set values in digits[] to be in their locations
+  int min = minutes;
+  int hr = hours;
+  digits[0] = hr / 10;
+  digits[1] = hr % 10;
+  digits[2] = min / 10;
+  digits[3] = min % 10;
+
+  // Debugging information
+  Serial.print("Separated Digits: ");
+  for (int i = 0; i < 4; i++) {
+    Serial.print(digits[i]);
+    Serial.print(" ");
+  }
+  Serial.println();
+}
+
+void updateDisplay() {
+  // update the display with the current time
+  separate(); // separate the hours and minutes into digits array
+}
+
+void showDigit(int digitIndex) {
+  digitalWrite(CATHODE_PINS[digitIndex], LOW); // turn on the current digit
+  shiftOut(DATA_PIN, CLOCK_PIN, LSBFIRST, TABLE[digits[digitIndex]]); // send the data to the shift register
+  digitalWrite(LATCH_PIN, HIGH); // latch the data
+  digitalWrite(LATCH_PIN, LOW); // reset the latch
+  delay(5); // Small delay to avoid ghosting
+  digitalWrite(CATHODE_PINS[digitIndex], HIGH); // turn off the current digit
+}
 
 void setup() {
-  Serial.begin(115200); 
-  pinMode(LATCH_PIN, OUTPUT);
-  pinMode(CLOCK_PIN, OUTPUT);
-  pinMode(DATA_PIN, OUTPUT);
+  Serial.begin(115200);
+  // Initialize pins
   for (int i = 0; i < 4; i++) {
     pinMode(CATHODE_PINS[i], OUTPUT);
     digitalWrite(CATHODE_PINS[i], HIGH);
   }
-  pinMode(ENCODER_PIN_DT, INPUT_PULLUP);
-  pinMode(ENCODER_PIN_CLK, INPUT_PULLUP);
+  pinMode(LATCH_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  pinMode(DATA_PIN, OUTPUT);
+
+  ticker.attach(1.0, incrementSeconds); // Call incrementSeconds every second
 }
 
 void loop() {
-  timer.update(); 
-
-  unsigned long currentTime = millis() / 1000;
-  int elapsedMinutes = (currentTime / 60) + startMinute;
-  int elapsedHours = (currentTime / 3600) + startHour;
-  if (elapsedMinutes >= 60) {
-    elapsedMinutes -= 60;
-    elapsedHours++;
-  }
-  if (elapsedHours >= 24) {
-    elapsedHours -= 24;
-  }
-  
-  adjustTime();
-  separate(elapsedHours, elapsedMinutes);
-  displayTime();
-
-  if (timerSuspended && (currentTime - lastAdjustmentTime >= 5)) {
-    timerSuspended = false;
-  }
-}
-
-void separate(int hours, int minutes) {
-  numbers[0] = hours / 10;
-  numbers[1] = hours % 10;
-  numbers[2] = minutes / 10;
-  numbers[3] = minutes % 10;
-}
-
-void displayTime() {
-  screenOff(); 
-  digitalWrite(LATCH_PIN, LOW); 
-  shiftOut(DATA_PIN, CLOCK_PIN, LSBFIRST, TABLE[numbers[count]]); 
-  digitalWrite(CATHODE_PINS[count], LOW); 
-  digitalWrite(LATCH_PIN, HIGH); 
-  count++; 
-  if (count == 4) { 
-    count = 0;
-  }
-}
-
-void screenOff() { 
+  updateDisplay();
   for (int i = 0; i < 4; i++) {
-    digitalWrite(CATHODE_PINS[i], HIGH);
-  }
-}
-
-void adjustTime() {
-  int currentStateCLK = digitalRead(ENCODER_PIN_CLK);
-  int currentStateDT = digitalRead(ENCODER_PIN_DT);
-
-  // Suspend the hardware timer while adjusting time
-  timerSuspended = true;
-
-  if (currentStateCLK != lastStateCLK && currentStateCLK == HIGH) {
-    if (currentStateDT != currentStateCLK) {
-      incrementMinute();
-    } else {
-      decrementMinute();
-    }
-
-    lastAdjustmentTime = millis() / 1000;
-  }
-
-  // Resume the hardware timer
-  timerSuspended = false;
-
-  lastStateCLK = currentStateCLK;
-}
-
-void incrementMinute() {
-  startMinute++;
-  if (startMinute >= 60) {
-    startMinute = 0;
-    startHour++;
-    if (startHour >= 24) {
-      startHour = 1; // Reset to 0 when 24 hours reached
-    }
-  }
-}
-
-void decrementMinute() {
-  startMinute--;
-  if (startMinute < 0) {
-    startMinute = 59; // Reset minutes to 59 when negative
-    if (startHour == 1) {
-      startHour = 24; // Roll over to 24 when reaching 01
-    } else {
-      startHour--; // Decrement hour normally
-    }
+    showDigit(i);
   }
 }
