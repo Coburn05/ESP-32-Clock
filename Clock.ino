@@ -3,8 +3,8 @@
 Ticker ticker;
 
 volatile int seconds = 0; // second
-volatile int minutes = 23; // minute
-volatile int hours = 10; // hour
+volatile int minutes = 55; // minute
+volatile int hours = 12; // hour
 int digits[4]; // digits to be displayed
 
 const byte TABLE[10] = {
@@ -25,13 +25,13 @@ const int CATHODE_PINS[] = {22, 21, 19, 4}; // pins for display
 const int LATCH_PIN = 5; // latch pin
 const int CLOCK_PIN = 18; // clock pin
 const int DATA_PIN = 23; // data pin to shift register
-const int ENCODER_PIN_DT = 2; // time adjust
-const int ENCODER_PIN_CLK = 15; // time adjust
-const int ENCODER_BUTTON_PIN = 14; // rotary button
+const int DISPLAY_SWITCH_PIN = 13; // D1 pin for display switch (GPIO 1)
+
+bool displayOn = true; // Flag to track display state
 
 void incrementSeconds() {
   // increment seconds on software timer
-  seconds += 15;
+  seconds++;
   if (seconds >= 60) {
     seconds = 0;
     incrementMinutes();
@@ -111,13 +111,30 @@ void setup() {
   pinMode(LATCH_PIN, OUTPUT);
   pinMode(CLOCK_PIN, OUTPUT);
   pinMode(DATA_PIN, OUTPUT);
+  pinMode(DISPLAY_SWITCH_PIN, INPUT_PULLUP); // set display switch pin as input with internal pull-up resistor
 
   ticker.attach(1.0, incrementSeconds); // Call incrementSeconds every second
 }
 
 void loop() {
-  updateDisplay();
-  for (int i = 0; i < 4; i++) {
-    showDigit(i);
+  // Check display switch state
+  if (digitalRead(DISPLAY_SWITCH_PIN) == LOW) {
+    // Switch pressed (display OFF)
+    if (displayOn) {
+      displayOn = false;
+      screenOff(); // turn off the display
+      Serial.println("Display OFF");
+    }
+  } else {
+    // Switch not pressed (display ON)
+    if (!displayOn) {
+      displayOn = true;
+      Serial.println("Display ON");
+    }
+    updateDisplay(); // update the display with current time
+    for (int i = 0; i < 4; i++) {
+      showDigit(i); // show each digit on the display
+    }
   }
 }
+
