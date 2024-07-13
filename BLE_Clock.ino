@@ -7,6 +7,7 @@
 Ticker ticker;
 BLECharacteristic *pCharacteristic;
 bool deviceConnected = false;
+bool pairingMode = false; // Flag to track pairing mode state
 String receivedValue;
 
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -41,7 +42,7 @@ bool displayOn = true; // Flag to track display state
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-       String value = pCharacteristic->getValue();
+        String value = pCharacteristic->getValue().c_str();
         if (value.length() > 0) {
             receivedValue = value.c_str();
             Serial.print("Received Value: ");
@@ -78,122 +79,126 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 void incrementSeconds() {
-  // increment seconds on software timer
-  seconds++;
-  if (seconds >= 60) {
-    seconds = 0;
-    incrementMinutes();
-  }
+    // increment seconds on software timer
+    seconds++;
+    if (seconds >= 60) {
+        seconds = 0;
+        incrementMinutes();
+    }
 }
 
 void incrementMinutes() {
-  // increments minutes as needed
-  minutes++;
-  if (minutes >= 60) {
-    minutes = 0;
-    incrementHours();
-  }
-  updateDisplay();
+    // increments minutes as needed
+    minutes++;
+    if (minutes >= 60) {
+        minutes = 0;
+        incrementHours();
+    }
+    updateDisplay();
 }
 
 void incrementHours() {
-  // increment hours as needed
-  hours++;
-  if (hours >= 24) {
-    hours = 0;
-  }
+    // increment hours as needed
+    hours++;
+    if (hours >= 24) {
+        hours = 0;
+    }
 }
 
 void screenOff() { 
-  // reset display
-  for (int i = 0; i < 4; i++) {
-    digitalWrite(CATHODE_PINS[i], HIGH);
-  }
+    // reset display
+    for (int i = 0; i < 4; i++) {
+        digitalWrite(CATHODE_PINS[i], HIGH);
+    }
 }
 
 void separate() {
-  // set values in digits[] to be in their locations
-  int min = minutes;
-  int hr = hours;
-  digits[0] = hr / 10;
-  digits[1] = hr % 10;
-  digits[2] = min / 10;
-  digits[3] = min % 10;
+    // set values in digits[] to be in their locations
+    int min = minutes;
+    int hr = hours;
+    digits[0] = hr / 10;
+    digits[1] = hr % 10;
+    digits[2] = min / 10;
+    digits[3] = min % 10;
 }
 
 void updateDisplay() {
-  // update the display with the current time
-  separate(); // separate the hours and minutes into digits array
+    // update the display with the current time
+    separate(); // separate the hours and minutes into digits array
 }
 
 void showDigit(int digitIndex) {
-  digitalWrite(CATHODE_PINS[digitIndex], LOW); // turn on the current digit
-  shiftOut(DATA_PIN, CLOCK_PIN, LSBFIRST, TABLE[digits[digitIndex]]); // send the data to the shift register
-  digitalWrite(LATCH_PIN, HIGH); // latch the data
-  digitalWrite(LATCH_PIN, LOW); // reset the latch
-  delay(5); // Small delay to avoid ghosting
-  digitalWrite(CATHODE_PINS[digitIndex], HIGH); // turn off the current digit
+    digitalWrite(CATHODE_PINS[digitIndex], LOW); // turn on the current digit
+    shiftOut(DATA_PIN, CLOCK_PIN, LSBFIRST, TABLE[digits[digitIndex]]); // send the data to the shift register
+    digitalWrite(LATCH_PIN, HIGH); // latch the data
+    digitalWrite(LATCH_PIN, LOW); // reset the latch
+    delay(5); // Small delay to avoid ghosting
+    digitalWrite(CATHODE_PINS[digitIndex], HIGH); // turn off the current digit
 }
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  BLEDevice::init("CLOCK BLE TEST");
-  BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+    BLEDevice::init("CLOCK BLE TEST");
+    BLEServer *pServer = BLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pService = pServer->createService(SERVICE_UUID);
+    BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_WRITE
-  );
+    pCharacteristic = pService->createCharacteristic(
+        CHARACTERISTIC_UUID,
+        BLECharacteristic::PROPERTY_READ |
+        BLECharacteristic::PROPERTY_WRITE
+    );
 
-  pCharacteristic->setCallbacks(new MyCallbacks());
-  pCharacteristic->setValue("Hello World");
+    pCharacteristic->setCallbacks(new MyCallbacks());
+    pCharacteristic->setValue("Hello World");
 
-  pService->start();
+    pService->start();
 
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);
-  pAdvertising->setMinPreferred(0x12);
-  BLEDevice::startAdvertising();
-  Serial.println("Waiting for a client connection to notify...");
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMinPreferred(0x12);
+    BLEDevice::startAdvertising();
+    Serial.println("Waiting for a client connection to notify...");
 
-  // Initialize pins
-  for (int i = 0; i < 4; i++) {
-    pinMode(CATHODE_PINS[i], OUTPUT);
-    digitalWrite(CATHODE_PINS[i], HIGH);
-  }
-  pinMode(LATCH_PIN, OUTPUT);
-  pinMode(CLOCK_PIN, OUTPUT);
-  pinMode(DATA_PIN, OUTPUT);
-  pinMode(DISPLAY_SWITCH_PIN, INPUT_PULLUP); // set display switch pin as input with internal pull-up resistor
+    // Initialize pins
+    for (int i = 0; i < 4; i++) {
+        pinMode(CATHODE_PINS[i], OUTPUT);
+        digitalWrite(CATHODE_PINS[i], HIGH);
+    }
+    pinMode(LATCH_PIN, OUTPUT);
+    pinMode(CLOCK_PIN, OUTPUT);
+    pinMode(DATA_PIN, OUTPUT);
+    pinMode(DISPLAY_SWITCH_PIN, INPUT_PULLUP); // set display switch pin as input with internal pull-up resistor
 
-  ticker.attach(1.0, incrementSeconds); // Call incrementSeconds every second
+    ticker.attach(1.0, incrementSeconds); // Call incrementSeconds every second
 }
 
 void loop() {
-  // Check display switch state
-  if (digitalRead(DISPLAY_SWITCH_PIN) == LOW) {
-    // Switch pressed (display OFF)
-    if (displayOn) {
-      displayOn = false;
-      screenOff(); // turn off the display
-      Serial.println("Display OFF");
+    // Check display switch state
+    if (digitalRead(DISPLAY_SWITCH_PIN) == LOW) {
+        // Switch pressed (enter pairing mode)
+        if (!pairingMode) {
+            pairingMode = true;
+            BLEDevice::startAdvertising();
+            Serial.println("Entering Pairing Mode...");
+        }
+    } else {
+        // Switch not pressed (exit pairing mode)
+        if (pairingMode) {
+            pairingMode = false;
+            BLEDevice::stopAdvertising();
+            Serial.println("Exiting Pairing Mode...");
+        }
+
+        if (deviceConnected) {
+            updateDisplay(); // update the display with current time
+            for (int i = 0; i < 4; i++) {
+                showDigit(i); // show each digit on the display
+            }
+        }
     }
-  } else {
-    // Switch not pressed (display ON)
-    if (!displayOn) {
-      displayOn = true;
-      Serial.println("Display ON");
-    }
-    updateDisplay(); // update the display with current time
-    for (int i = 0; i < 4; i++) {
-      showDigit(i); // show each digit on the display
-    }
-  }
 }
