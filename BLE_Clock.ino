@@ -194,11 +194,9 @@ void loop() {
             Serial.println("Exiting Pairing Mode...");
         }
 
-        if (deviceConnected) {
-            updateDisplay(); // update the display with current time
-            for (int i = 0; i < 4; i++) {
-                showDigit(i); // show each digit on the display
-            }
+        updateDisplay(); // update the display with current time
+        for (int i = 0; i < 4; i++) {
+            showDigit(i); // show each digit on the display
         }
     }
 }
