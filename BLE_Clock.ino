@@ -8,6 +8,7 @@ Ticker ticker;
 BLECharacteristic *pCharacteristic;
 bool deviceConnected = false;
 bool pairingMode = false; // Flag to track pairing mode state
+bool displayOn = true; // track if the display is on or off
 String receivedValue;
 
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -36,9 +37,10 @@ const int CATHODE_PINS[] = {22, 21, 19, 4}; // pins for display
 const int LATCH_PIN = 5; // latch pin
 const int CLOCK_PIN = 18; // clock pin
 const int DATA_PIN = 23; // data pin to shift register
-const int DISPLAY_SWITCH_PIN = 13; // D13 pin for display switch (GPIO 13)
-
-bool displayOn = true; // Flag to track display state
+const int BLE_PAIRING = 13; // D13 pin for display switch (GPIO 13)
+const int BLE_CONNECTED_PIN = 12; // turn on led when device is connected
+const int DISPLAY_STATUS = 27; // switch to turn off the displays
+const int DISPLAY_SWITCH = 14; // correct pin for display switch control
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
@@ -172,14 +174,24 @@ void setup() {
     pinMode(LATCH_PIN, OUTPUT);
     pinMode(CLOCK_PIN, OUTPUT);
     pinMode(DATA_PIN, OUTPUT);
-    pinMode(DISPLAY_SWITCH_PIN, INPUT_PULLUP); // set display switch pin as input with internal pull-up resistor
+    pinMode(BLE_PAIRING, INPUT_PULLUP); // set ble switch pin as input with internal pull-up resistor
+    pinMode(DISPLAY_STATUS, INPUT_PULLUP);
+    pinMode(BLE_CONNECTED_PIN, OUTPUT);
+    pinMode(DISPLAY_SWITCH, OUTPUT);
 
     ticker.attach(1.0, incrementSeconds); // Call incrementSeconds every second
 }
 
 void loop() {
-    // Check display switch state
-    if (digitalRead(DISPLAY_SWITCH_PIN) == LOW) {
+    // indicate connected device
+    if(deviceConnected) {
+      digitalWrite(BLE_CONNECTED_PIN, HIGH);
+    } else {
+      digitalWrite(BLE_CONNECTED_PIN, LOW);
+    }
+
+    // Check ble switch state
+    if (digitalRead(BLE_PAIRING) == LOW) {
         // Switch pressed (enter pairing mode)
         if (!pairingMode) {
             pairingMode = true;
@@ -193,10 +205,30 @@ void loop() {
             BLEDevice::stopAdvertising();
             Serial.println("Exiting Pairing Mode...");
         }
+    }
 
-        updateDisplay(); // update the display with current time
-        for (int i = 0; i < 4; i++) {
-            showDigit(i); // show each digit on the display
+    // Check display switch state
+    if (digitalRead(DISPLAY_STATUS) == LOW) {
+        // Switch pressed (display OFF)
+        if (displayOn) {
+            displayOn = false;
+            digitalWrite(DISPLAY_SWITCH, LOW);
+            screenOff(); // turn off the display
+            Serial.println("Display OFF");
+        }
+    } else {
+        // Switch not pressed (display ON)
+        if (!displayOn) {
+            displayOn = true;
+            digitalWrite(DISPLAY_SWITCH, HIGH);
+            Serial.println("Display ON");
+        }
+
+        if (displayOn) {
+            updateDisplay(); // update the display with current time
+            for (int i = 0; i < 4; i++) {
+                showDigit(i); // show each digit on the display
+            }
         }
     }
 }
