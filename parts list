@@ -1,0 +1,10 @@
+Parts list
+1x NEC 2505 ND037 
+1x 4 digit 7 segment display 
+1x Texas Instruments SN74HC595N shift register
+1x ESP-WROOM-32
+1x LiIon battery (3.7V 1200 mAh)
+1x USB charger
+1x 3-wire volt meter (can be 2 wire)
+2x switch
+1x led
